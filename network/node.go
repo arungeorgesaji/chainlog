@@ -143,9 +143,9 @@ func (n *Node) Display() {
 		fmt.Printf("   Connected Peers:\n")
 		n.mutex.Lock()
 		for addr, peer := range n.Peers {
-			status := "🔴"
+			status := "Offline"
 			if peer.Connected {
-				status = "🟢"
+				status = "Online"
 			}
 			fmt.Printf("   %s %s (last seen: %v ago)\n", 
 				status, addr, time.Since(peer.LastSeen).Round(time.Second))

@@ -59,7 +59,8 @@ func (m *Miner) MineBlock() (*core.Block, error) {
 }
 
 func (m *Miner) createRewardTransaction() *core.Transaction {
-	blockReward := economy.CalculateBlockReward(m.Blockchain.GetBlockCount())
+	currentHeight := int64(m.Blockchain.GetBlockCount())
+  blockReward := economy.CalculateBlockReward(currentHeight)
 	
 	return &core.Transaction{
 		ID:        fmt.Sprintf("reward-%d", time.Now().UnixNano()),
@@ -88,8 +89,9 @@ func (m *Miner) StartMining() {
 					if err == nil {
 						m.Blockchain.Chain = append(m.Blockchain.Chain, block)
 						m.Blockchain.ClearPendingTransactions()
+						currentHeight := int64(m.Blockchain.GetBlockCount() - 1)
 						fmt.Printf("Mined block %d! Reward: %d LogCoins\n", 
-							block.Index, economy.CalculateBlockReward(m.Blockchain.GetBlockCount()-1))
+							block.Index, economy.CalculateBlockReward(currentHeight))
 					}
 				}
 				time.Sleep(1 * time.Second) 

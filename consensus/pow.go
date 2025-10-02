@@ -2,11 +2,11 @@ package consensus
 
 import (
 	"chainlog/core"
-	"crypto/sha256"
+	_ "crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"math/big"
-	"strings"
+	_ "strings"
 )
 
 type ProofOfWork struct {

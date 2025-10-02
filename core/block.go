@@ -1,4 +1,4 @@
-package core
+package core 
 
 import (
 	"crypto/sha256"
@@ -10,7 +10,8 @@ import (
 type Block struct {
 	Index        int64         
 	Timestamp    int64         
-	Data         string        
+	Data         string 
+	Transactions []*Transaction
 	PrevHash     string        
 	Hash         string        
 	Nonce        int64         

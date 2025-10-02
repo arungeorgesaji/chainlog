@@ -68,7 +68,7 @@ func (sm *StakingManager) DisplayValidators() {
 	}
 	
 	for _, validator := range sm.Validators {
-		status := Active
+		status := "Active"
 		if !validator.Active {
 			status = "Inactive"
 		}
