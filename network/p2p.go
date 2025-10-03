@@ -1,7 +1,8 @@
 package network
 
 import (
-	_ "chainlog/core"
+	"chainlog/core"
+	"chainlog/network"
 	"encoding/json"
 	"fmt"
 	"net"

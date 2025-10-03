@@ -51,10 +51,6 @@ func NewDataTransaction(data string, wallet *crypto.Wallet, fee uint64) (*Transa
 	return tx, nil
 }
 
-func (tx *Transaction) VerifySignature() bool {
-	return tx.Signature != "" && len(tx.Signature) == 128 
-}
-
 func (tx *Transaction) CalculateID() string {
 	txData := fmt.Sprintf("%s%s%s%d%d%d%d",
 		tx.Data,
