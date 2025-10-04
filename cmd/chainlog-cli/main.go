@@ -78,9 +78,6 @@ func main() {
 	bc.AddTransaction(tx1)
 	bc.AddTransaction(tx2)
 	
-	state.UpdateAccount(wallet1.GetAddress(), state.GetBalance(wallet1.GetAddress())-tx1.Fee, 1)
-	state.UpdateAccount(wallet2.GetAddress(), state.GetBalance(wallet2.GetAddress())-tx2.Fee, 1)
-	
 	fmt.Println("\n5. Testing Economy System...")
 	txProcessor := economy.NewTransactionProcessor(wallet1.GetAddress(), state)
 	

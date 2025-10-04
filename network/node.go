@@ -26,6 +26,9 @@ type Peer struct {
 	ID        string
 	Address   string
 	Connected bool
+	Conn      net.Conn           
+	Encoder   *json.Encoder        
+	Decoder   *json.Decoder      
 	LastSeen  time.Time
 }
 
@@ -123,24 +126,36 @@ func (n *Node) AddPeer(address string) {
 func (n *Node) ConnectToPeer(address string) error {
 	conn, err := net.Dial("tcp", address)
 	if err != nil {
-		return fmt.Errorf("failed to connect to %s: %v", address, err)
+			return err
 	}
-	defer conn.Close()
 	
-	buffer := make([]byte, 1024)
-	nBytes, _ := conn.Read(buffer)
-	response := string(buffer[:nBytes])
-	
-	fmt.Printf("Connected to %s: %s", address, response)
-	
-	n.mutex.Lock()
-	if peer, exists := n.Peers[address]; exists {
-		peer.Connected = true
-		peer.LastSeen = time.Now()
+	peer := &Peer{
+		ID:        "peer-" + address,
+		Address:   address,
+		Connected: true,
+		Conn:      conn,
+		Encoder:   json.NewEncoder(conn),
+		Decoder:   json.NewDecoder(conn),
+		LastSeen:  time.Now(),
 	}
-	n.mutex.Unlock()
+	
+	n.Peers[address] = peer
+	
+	go n.listenToPeer(peer)
 	
 	return nil
+}
+
+func (n *Node) listenToPeer(peer *Peer) {
+	for {
+		var msg Message
+		if err := peer.Decoder.Decode(&msg); err != nil {
+				peer.Connected = false
+				peer.Conn.Close()
+				return
+		}
+		n.HandleMessage(msg, peer.Conn)
+	}
 }
 
 func (n *Node) GetPeerCount() int {

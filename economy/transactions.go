@@ -21,12 +21,29 @@ func NewTransactionProcessor(feeCollector string, stateManager *storage.StateMan
 }
 
 func (tp *TransactionProcessor) CalculateFeeDistribution(fee uint64) (uint64, uint64) {
-	minerShare := fee * 80 / 100  
-	burnAmount := fee * 20 / 100  
+	minerShare := (fee * 80 + 50) / 100  
+	burnAmount := fee - minerShare  
+
 	return minerShare, burnAmount
 }
 
 func (tp *TransactionProcessor) ProcessTransaction(tx *core.Transaction) error {
+	if tx.ID == "" {
+    return fmt.Errorf("transaction ID is required")
+}
+
+	if tx.Sender == "" {
+			return fmt.Errorf("sender address is required")
+	}
+
+	if tx.Timestamp == 0 {
+			return fmt.Errorf("transaction timestamp is required")
+	}
+
+	if tx.ID != tx.CalculateID() {
+			return fmt.Errorf("transaction ID is invalid")
+	}
+
 	if !ValidateTransactionFee(tx.Fee) {
 		return fmt.Errorf("invalid transaction fee: %d (must be %d-%d)", 
 			tx.Fee, MinTransactionFee, MaxTransactionFee)
@@ -41,16 +58,40 @@ func (tp *TransactionProcessor) ProcessTransaction(tx *core.Transaction) error {
 	if tx.Amount > 0 && tx.Receiver == "" {
 		return fmt.Errorf("transfer transaction must have a receiver")
 	}
+
+	switch tx.Type {
+		case core.DataTx:
+				if tx.Data == "" {
+						return fmt.Errorf("data transactions must contain data")
+				}
+		case core.TransferTx:
+				if tx.Receiver == "" {
+						return fmt.Errorf("transfer transactions require a receiver")
+				}
+				if tx.Amount == 0 {
+						return fmt.Errorf("transfer amount must be greater than 0")
+				}
+				if tx.Sender == tx.Receiver {
+						return fmt.Errorf("cannot transfer to self")
+				}
+		case core.StakeTx:
+				if tx.Amount == 0 {
+						return fmt.Errorf("staking amount must be greater than 0")
+				}
+				if tx.Amount < 100 { 
+						return fmt.Errorf("minimum stake amount is 100 LogCoins")
+				}
+		}
 	
 	switch tx.Type {
-	case core.DataTx:
-		return tp.processDataTransaction(tx)
-	case core.TransferTx: 
-		return tp.processTransferTransaction(tx)
-	case core.StakeTx:
-		return tp.processStakeTransaction(tx)
-	default:
-		return fmt.Errorf("unsupported transaction type: %d", tx.Type)
+		case core.DataTx:
+			return tp.processDataTransaction(tx)
+		case core.TransferTx: 
+			return tp.processTransferTransaction(tx)
+		case core.StakeTx:
+			return tp.processStakeTransaction(tx)
+		default:
+			return fmt.Errorf("unsupported transaction type: %d", tx.Type)
 	}
 }
 
@@ -113,6 +154,9 @@ func (tp *TransactionProcessor) deductBalance(address string, amount uint64) err
 func (tp *TransactionProcessor) addBalance(address string, amount uint64) error {
 	account, exists := tp.StateManager.GetAccount(address)
 	if exists {
+		if ^uint64(0) - account.Balance < amount {
+			return fmt.Errorf("balance overflow: cannot add %d to current balance %d", amount, account.Balance)
+    }
 		account.Balance += amount
 	} else {
 		tp.StateManager.UpdateAccount(address, amount, 0)
