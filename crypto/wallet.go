@@ -52,6 +52,13 @@ func (w *Wallet) GetAddressShort() string {
 	return w.Address
 }
 
+func PublicKeyToString(pubKey *ecdsa.PublicKey) string {
+	if pubKey == nil || pubKey.X == nil || pubKey.Y == nil {
+		return ""
+	}
+	return fmt.Sprintf("%x", pubKey.X.Bytes()) + fmt.Sprintf("%x", pubKey.Y.Bytes())
+}
+
 func (w *Wallet) Display() {
 	fmt.Printf("WALLET INFORMATION\n")
 	fmt.Printf("├─ Address: %s\n", w.Address)

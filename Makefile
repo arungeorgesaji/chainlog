@@ -1,23 +1,16 @@
-BINARY_NAME=chainlog
-CLI_NAME=chainlog-cli
-MINER_NAME=chainlog-miner
-
-build:
-	go build -o bin/$(BINARY_NAME) cmd/chainlog-node/main.go
-
 build-cli:
-	go build -o bin/$(CLI_NAME) cmd/chainlog-cli/main.go
+	go build -o bin/chainlog-cli cmd/chainlog-cli/main.go
 
-build-miner:
-	go build -o bin/$(MINER_NAME) cmd/chainlog-miner/main.go
+build-test:
+	go build -o bin/chainlog-test cmd/chainlog-test/main.go
 
-build-all: build build-cli build-miner
+build-all: build build-test
 
-run:
-	go run cmd/chainlog-node/main.go
+run-cli:
+	go run cmd/chainlog-cli/main.go
 
-test:
-	go test ./...
+run-test:
+	go run cmd/chainlog-test/main.go
 
 clean:
 	rm -rf bin/
