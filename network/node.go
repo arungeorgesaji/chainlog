@@ -3,6 +3,7 @@ package network
 import (
 	"chainlog/core"
 	"chainlog/crypto"
+	"encoding/json"
 	"fmt"
 	"net"
 	"sync"
@@ -84,6 +85,24 @@ func (n *Node) handleConnection(conn net.Conn) {
 	
 	conn.Write([]byte("Hello from ChainLog node " + n.ID + "\n"))
 	fmt.Printf("New connection from %s\n", conn.RemoteAddr().String())
+
+	buffer := make([]byte, 1024*1024)
+
+	for {
+			nBytes, err := conn.Read(buffer)
+			if err != nil {
+					fmt.Printf("Connection closed: %v\n", err)
+					return
+			}
+			
+			var msg Message
+			if err := json.Unmarshal(buffer[:nBytes], &msg); err != nil {
+					fmt.Printf("Error parsing message: %v\n", err)
+					continue
+			}
+			
+			n.HandleMessage(msg, conn)
+	}
 }
 
 func (n *Node) AddPeer(address string) {

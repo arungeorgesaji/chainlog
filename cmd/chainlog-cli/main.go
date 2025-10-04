@@ -82,7 +82,7 @@ func main() {
 	state.UpdateAccount(wallet2.GetAddress(), state.GetBalance(wallet2.GetAddress())-tx2.Fee, 1)
 	
 	fmt.Println("\n5. Testing Economy System...")
-	txProcessor := economy.NewTransactionProcessor(wallet1.GetAddress())
+	txProcessor := economy.NewTransactionProcessor(wallet1.GetAddress(), state)
 	
 	txProcessor.ProcessTransaction(tx1)
 	txProcessor.ProcessTransaction(tx2)
@@ -108,7 +108,7 @@ func main() {
 	node.BroadcastTransaction(tx1)
 	node.BroadcastTransaction(tx2)
 	
-	feeManager := economy.NewFeeManager(wallet1.GetAddress())
+	feeManager := economy.NewFeeManager(wallet1.GetAddress(), state)
 	
 	fmt.Println("\n8. Setting Up Miner...")
 	miner := consensus.NewMiner(wallet1, bc)

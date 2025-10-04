@@ -53,7 +53,7 @@ func (w *Wallet) GetAddressShort() string {
 }
 
 func (w *Wallet) Display() {
-	fmt.Printf("👛 WALLET INFORMATION\n")
+	fmt.Printf("WALLET INFORMATION\n")
 	fmt.Printf("├─ Address: %s\n", w.Address)
 	fmt.Printf("├─ Short: %s\n", w.GetAddressShort())
 	fmt.Printf("└─ Private Key: %s... (keep secret!)\n", PrivateKeyToString(w.PrivateKey)[:16])

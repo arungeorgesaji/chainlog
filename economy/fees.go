@@ -2,18 +2,25 @@ package economy
 
 import (
 	"chainlog/core"
+	"chainlog/storage"
 	"fmt"
 )
 
 type FeeManager struct {
 	TotalFeesCollected uint64
+	TransactionProc    *TransactionProcessor 
 	TotalFeesBurned    uint64
 	FeeCollector       string
 }
 
-func NewFeeManager(feeCollector string) *FeeManager {
+func NewFeeManager(feeCollector string, stateManager *storage.StateManager) *FeeManager {
+	processor := NewTransactionProcessor(feeCollector, stateManager)
+
 	return &FeeManager{
-		FeeCollector: feeCollector,
+		FeeCollector:       feeCollector,
+		TransactionProc:    processor,  
+		TotalFeesCollected: 0,
+		TotalFeesBurned:    0,
 	}
 }
 
@@ -22,7 +29,7 @@ func (fm *FeeManager) ProcessFees(transactions []*core.Transaction) []*core.Tran
 	totalFees := uint64(0)
 	totalBurned := uint64(0)
 	
-	processor := NewTransactionProcessor(fm.FeeCollector)
+	processor := fm.TransactionProc
 	
 	for _, tx := range transactions {
 		if tx.Fee > 0 {

@@ -12,6 +12,7 @@ type TransactionType int
 
 const (
 	DataTx   TransactionType = iota  
+	TransferTx
 	FeeTx                            
 	RewardTx                         
 	StakeTx                          
