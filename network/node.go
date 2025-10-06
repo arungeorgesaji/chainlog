@@ -17,6 +17,7 @@ type Node struct {
 	Blockchain   *core.Blockchain
 	Wallet       *crypto.Wallet
 	IsMiner      bool
+	peerFile   string
 	Server       net.Listener
 	mutex        sync.Mutex      
 	stopChan     chan bool
@@ -130,13 +131,13 @@ func (n *Node) ConnectToPeer(address string) error {
 	}
 	
 	peer := &Peer{
-		ID:        "peer-" + address,
-		Address:   address,
-		Connected: true,
-		Conn:      conn,
-		Encoder:   json.NewEncoder(conn),
-		Decoder:   json.NewDecoder(conn),
-		LastSeen:  time.Now(),
+			ID:        "peer-" + address,
+			Address:   address,
+			Connected: true,
+			Conn:      conn,
+			Encoder:   json.NewEncoder(conn),
+			Decoder:   json.NewDecoder(conn),
+			LastSeen:  time.Now(),
 	}
 	
 	n.Peers[address] = peer

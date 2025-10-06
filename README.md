@@ -53,14 +53,7 @@
 - **Reward**: Motivation for miners (could be reputation)
 - **Competition**: Miners race to find next block
 
-## 8. SMART CONTRACTS
-
-- **Automated Rules**: "If X happens, then do Y"
-- **Code Execution**: Run programs on blockchain
-- **State Changes**: Modify stored data automatically
-- **Triggers**: Execute based on conditions
-
-# 9. COINS AND ECONOMY
+# 8. COINS AND ECONOMY
 
 ChainLog uses **LogCoins** as a utility token to secure the network and incentivize participation.
 
@@ -125,15 +118,5 @@ ChainLog uses **LogCoins** as a utility token to secure the network and incentiv
 This economic structure ensures ChainLog remains secure, decentralized, and sustainable while aligning incentives across all network participants.
 
 ---
-
-## Use Cases
-
-- Academic Research Data
-- Software Development History  
-- Legal & Compliance Records
-- Supply Chain Tracking
-- Personal Data Logging
-
-## Key Innovation
 
 Instead of moving money, ChainLog moves **trust** - providing cryptographic proof that data existed at a certain time and hasn't been modified since and it happens right in your terminal.

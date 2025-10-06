@@ -3,6 +3,8 @@ package consensus
 import (
 	"fmt"
 	"sync"
+	"encoding/json"
+	"os"
 )
 
 type Validator struct {
@@ -19,10 +21,16 @@ type StakingManager struct {
 }
 
 func NewStakingManager() *StakingManager {
-	return &StakingManager{
+	sm := &StakingManager{
 		Validators: make(map[string]*Validator),
 		MinStake:   100, 
 	}
+	
+	if err := sm.LoadStakingData(); err != nil {
+		fmt.Printf("Warning: Could not load staking data: %v\n", err)
+	}
+	
+	return sm
 }
 
 func (sm *StakingManager) AddStake(address string, amount uint64) error {
@@ -56,6 +64,48 @@ func (sm *StakingManager) GetTotalStaked() uint64 {
 		total += validator.Staked
 	}
 	return total
+}
+
+func (sm *StakingManager) SaveStakingData() error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+	
+	data, err := json.MarshalIndent(sm.Validators, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal staking data: %v", err)
+	}
+	
+	if err := os.MkdirAll("chainlog-data", 0755); err != nil {
+		return fmt.Errorf("failed to create data directory: %v", err)
+	}
+	
+	if err := os.WriteFile("chainlog-data/staking.json", data, 0644); err != nil {
+		return fmt.Errorf("failed to save staking data: %v", err)
+	}
+	
+	fmt.Printf("Saved staking data: %d validators\n", len(sm.Validators))
+	return nil
+}
+
+func (sm *StakingManager) LoadStakingData() error {
+	sm.mutex.Lock()
+	defer sm.mutex.Unlock()
+	
+	data, err := os.ReadFile("chainlog-data/staking.json")
+	if err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("No existing staking data found, starting fresh")
+			return nil
+		}
+		return fmt.Errorf("failed to read staking data: %v", err)
+	}
+	
+	if err := json.Unmarshal(data, &sm.Validators); err != nil {
+		return fmt.Errorf("failed to unmarshal staking data: %v", err)
+	}
+	
+	fmt.Printf("Loaded staking data: %d validators\n", len(sm.Validators))
+	return nil
 }
 
 func (sm *StakingManager) DisplayValidators() {

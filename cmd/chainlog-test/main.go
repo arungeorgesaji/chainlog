@@ -34,19 +34,43 @@ func main() {
 	}
 	
 	fmt.Println("\n2. Creating wallets...")
-	wm := crypto.GetWalletManager()
+	wm := storage.GetWalletManager()
+	
+	// Declare wallet variables at function scope
+	var wallet1, wallet2 *crypto.Wallet
+	
 	if wm.WalletCount() == 0 {
-			fmt.Println("No wallets found in storage, creating new ones...")
-			wallet1, _ := crypto.NewWallet()
-			wm.SaveWallet(wallet1, "Genesis Wallet 1")
-			wallet2, _ := crypto.NewWallet()
-			wm.SaveWallet(wallet2, "Genesis Wallet 2")
+		fmt.Println("No wallets found in storage, creating new ones...")
+		wallet1, _ = crypto.NewWallet() // Use = instead of :=
+		wm.SaveWallet(wallet1, "Genesis Wallet 1")
+		wallet2, _ = crypto.NewWallet() // Use = instead of :=
+		wm.SaveWallet(wallet2, "Genesis Wallet 2")
+	} else {
+		// Load existing wallets
+		wallets := wm.GetAllWallets()
+		if len(wallets) >= 2 {
+			wallet1, _ = storage.LoadWalletFromStorage(wallets[0].Address)
+			wallet2, _ = storage.LoadWalletFromStorage(wallets[1].Address)
+		} else {
+			// If not enough wallets, create the missing ones
+			if len(wallets) == 0 {
+				wallet1, _ = crypto.NewWallet()
+				wm.SaveWallet(wallet1, "Genesis Wallet 1")
+				wallet2, _ = crypto.NewWallet()
+				wm.SaveWallet(wallet2, "Genesis Wallet 2")
+			} else {
+				wallet1, _ = storage.LoadWalletFromStorage(wallets[0].Address)
+				wallet2, _ = crypto.NewWallet()
+				wm.SaveWallet(wallet2, "Genesis Wallet 2")
+			}
+		}
 	}
 
-	defaultWallet, err := crypto.GetDefaultWallet()
+	defaultWallet, err := storage.GetDefaultWallet()
 	if err != nil {
-			panic(err)
+		panic(err)
 	}
+	fmt.Printf("Default wallet: %s\n", defaultWallet.GetAddressShort())
 	
 	wallet1.Display()
 	wallet2.Display()
@@ -232,7 +256,7 @@ func main() {
 	for _, validator := range staking.Validators {
 		stakeReward := rewardManager.CreateStakingReward(validator.Address, validator.Staked)
 		if stakeReward != nil {
-			fmt.Printf("   %s earned %d LogCoins staking reward\n", 				validator.Address[:8], stakeReward.Amount)
+			fmt.Printf("   %s earned %d LogCoins staking reward\n", validator.Address[:8], stakeReward.Amount)
 			currentBalance := state.GetBalance(validator.Address)
 			state.UpdateAccount(validator.Address, currentBalance+stakeReward.Amount, 0)
 		}

@@ -1,9 +1,7 @@
-package crypto
+package storage
 
 import (
-	"chainlog/storage"
-	"crypto/ecdsa"
-	"encoding/json"
+	"chainlog/crypto"
 	"fmt"
 	"sync"
 	"time"
@@ -37,14 +35,14 @@ func GetWalletManager() *WalletManager {
 	return walletManager
 }
 
-func (wm *WalletManager) SaveWallet(wallet *Wallet, label string) error {
+func (wm *WalletManager) SaveWallet(wallet *crypto.Wallet, label string) error { 
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
 	stored := &StoredWallet{
 		Address:    wallet.Address,
-		PrivateKey: PrivateKeyToString(wallet.PrivateKey),
-		PublicKey:  PublicKeyToString(wallet.PublicKey),
+		PrivateKey: crypto.PrivateKeyToString(wallet.PrivateKey), 
+		PublicKey:  crypto.PublicKeyToString(wallet.PublicKey),   
 		Label:      label,
 		CreatedAt:  time.Now().Unix(),
 	}
@@ -85,16 +83,16 @@ func (wm *WalletManager) DeleteWallet(address string) bool {
 }
 
 func (wm *WalletManager) loadWallets() error {
-	if err := storage.EnsureDataDir(); err != nil {
+	if err := EnsureDataDir(); err != nil { 
 		return err
 	}
 
-	if !storage.FileExists(storage.WalletsFile) {
+	if !FileExists(WalletsFile) { 
 		return nil 
 	}
 
 	var wallets map[string]*StoredWallet
-	if err := storage.LoadFromFile(&wallets, storage.WalletsFile); err != nil {
+	if err := LoadFromFile(&wallets, WalletsFile); err != nil { 
 		return err
 	}
 
@@ -103,7 +101,7 @@ func (wm *WalletManager) loadWallets() error {
 }
 
 func (wm *WalletManager) saveToFile() error {
-	return storage.SaveToFile(wm.Wallets, storage.WalletsFile)
+	return SaveToFile(wm.Wallets, WalletsFile) 
 }
 
 func (wm *WalletManager) WalletCount() int {
@@ -112,17 +110,17 @@ func (wm *WalletManager) WalletCount() int {
 	return len(wm.Wallets)
 }
 
-func LoadWalletFromStorage(address string) (*Wallet, error) {
+func LoadWalletFromStorage(address string) (*crypto.Wallet, error) { 
 	wm := GetWalletManager()
 	stored, exists := wm.GetWallet(address)
 	if !exists {
 		return nil, fmt.Errorf("wallet not found in storage: %s", address)
 	}
 
-	return WalletFromPrivateKey(stored.PrivateKey)
+	return crypto.WalletFromPrivateKey(stored.PrivateKey)
 }
 
-func GetDefaultWallet() (*Wallet, error) {
+func GetDefaultWallet() (*crypto.Wallet, error) { 
 	wm := GetWalletManager()
 	wallets := wm.GetAllWallets()
 	if len(wallets) == 0 {

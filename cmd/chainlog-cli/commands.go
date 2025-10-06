@@ -10,12 +10,15 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
+	"time"
 )
 
 var (
-	bc    *core.Blockchain
-	state *storage.StateManager
-	node  *network.Node
+	bc     *core.Blockchain
+	state  *storage.StateManager
+	node   *network.Node
+	ledger *storage.LedgerManager
 )
 
 func startNode() {
@@ -24,11 +27,15 @@ func startNode() {
 		port = os.Args[2]
 	}
 
+	if err := storage.SaveNodeState(port); err != nil {
+		fmt.Printf("Warning: Could not save node state: %v\n", err)
+	}
+
 	fmt.Printf("Starting ChainLog node on port %s...\n", port)
 	
 	bc = core.NewBlockchain()
 	state = storage.NewStateManager()
-	ledger := storage.NewLedgerManager(bc)
+	ledger = storage.NewLedgerManager(bc)
 
 	if err := ledger.LoadBlockchain(); err != nil {
 		fmt.Printf("Starting fresh blockchain: %v\n", err)
@@ -39,16 +46,23 @@ func startNode() {
 
 	wallet, err := loadOrCreateWallet()
 	if err != nil {
+		storage.DeleteNodeState() 
 		panic(err)
 	}
 
 	node = network.NewNode("localhost:"+port, wallet, bc, true)
+
+	go node.CheckBroadcastFile()
+	
 	if err := node.Start(); err != nil {
+		storage.DeleteNodeState()
 		panic(err)
 	}
 
 	fmt.Printf("Node started successfully! Address: %s\n", wallet.GetAddress())
 	fmt.Println("Node is running... (Ctrl+C to stop)")
+
+	defer storage.DeleteNodeState()
 
 	select {}
 }
@@ -66,7 +80,7 @@ func handleWallet() {
 		return
 	}
 
-	wm := crypto.GetWalletManager()
+	wm := storage.GetWalletManager()
 
 	switch os.Args[2] {
 	case "create":
@@ -87,7 +101,7 @@ func handleWallet() {
 		}
 
 		fmt.Printf("Wallet created and saved successfully!\n\n")
-		wallet.DisplayFull()
+		wallet.Display()
 		fmt.Printf("\nLabel: %s\n", label)
 		fmt.Printf("Storage: %s\n", storage.DataDir+"/"+storage.WalletsFile)
 		fmt.Printf("Total wallets: %d\n", wm.WalletCount())
@@ -176,9 +190,9 @@ func handleWallet() {
 		fmt.Printf("└─ Public Key: %s...\n", stored.PublicKey[:16])
 
 	case "default":
-		wallet, err := crypto.GetDefaultWallet()
+		wallet, err := storage.GetDefaultWallet()
 		if err != nil {
-			fmt.Printf("g %v\n", err)
+			fmt.Printf("Error: %v\n", err)
 			fmt.Println("   Create a wallet first with: chainlog-cli wallet create")
 			return
 		}
@@ -192,127 +206,6 @@ func handleWallet() {
 	default:
 		fmt.Println("Usage: chainlog-cli wallet [create|import|list|delete|info|default]")
 	}
-}
-
-func handleMine() {
-	if bc == nil || state == nil {
-		fmt.Println("Please start a node first")
-		return
-	}
-
-	fmt.Println("Mining pending transactions...")
-	
-	wallet, err := loadOrCreateWallet()
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
-		return
-	}
-
-	miner := consensus.NewMiner(wallet, bc)
-	block, err := miner.MineBlock()
-	if err != nil {
-		fmt.Printf("Mining failed: %v\n", err)
-		return
-	}
-
-	bc.Chain = append(bc.Chain, block)
-	bc.ClearPendingTransactions()
-
-	fmt.Printf("Successfully mined block %d!\n", block.Index)
-	fmt.Printf("Block hash: %s\n", block.Hash[:16])
-}
-
-func handleStatus() {
-	if bc == nil {
-		fmt.Println("Please start a node first")
-		return
-	}
-
-	fmt.Printf("\nCHAINLOG STATUS\n")
-	fmt.Printf("├─ Blocks: %d\n", bc.GetBlockCount())
-	fmt.Printf("├─ Pending Transactions: %d\n", len(bc.GetPendingTransactions()))
-	fmt.Printf("├─ Difficulty: %d\n", bc.Difficulty)
-	fmt.Printf("└─ Valid: %t\n", core.NewValidator(bc).ValidateBlockchain())
-
-	if node != nil {
-		fmt.Printf("├─ Node Peers: %d\n", node.GetPeerCount())
-	}
-}
-
-func handleBalance() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: chainlog-cli balance <address>")
-		return
-	}
-	if state == nil {
-		fmt.Println("Please start a node first")
-		return
-	}
-
-	address := os.Args[2]
-	balance := state.GetBalance(address)
-	fmt.Printf("Balance for %s: %d LogCoins\n", address[:8], balance)
-}
-
-func handlePeers() {
-	if len(os.Args) < 3 {
-		fmt.Println("Usage: chainlog-cli peers [add|list]")
-		return
-	}
-
-	switch os.Args[2] {
-	case "add":
-		if len(os.Args) < 4 {
-			fmt.Println("Usage: chainlog-cli peers add <address>")
-			return
-		}
-		if node == nil {
-			fmt.Println("Please start a node first")
-			return
-		}
-		node.AddPeer(os.Args[3])
-		fmt.Printf("Added peer: %s\n", os.Args[3])
-
-	case "list":
-		if node == nil {
-			fmt.Println("Please start a node first")
-			return
-		}
-		node.Display()
-
-	default:
-		fmt.Println("Usage: chainlog-cli peers [add|list]")
-	}
-}
-
-func loadOrCreateWallet() (*crypto.Wallet, error) {
-    wm := crypto.GetWalletManager()
-    
-    wallets := wm.GetAllWallets()
-    
-    if len(wallets) > 0 {
-        fmt.Printf("Found %d existing wallet(s), using default...\n", len(wallets))
-        wallet, err := crypto.GetDefaultWallet()
-        if err != nil {
-            return nil, fmt.Errorf("failed to load default wallet: %v", err)
-        }
-        fmt.Printf("Loaded wallet: %s (%s)\n", wallet.GetAddressShort(), wallets[0].Label)
-        return wallet, nil
-    }
-    
-    fmt.Println("No existing wallets found, creating new wallet...")
-    wallet, err := crypto.NewWallet()
-    if err != nil {
-        return nil, fmt.Errorf("failed to create wallet: %v", err)
-    }
-    
-    label := "Node Wallet " + time.Now().Format("2006-01-02")
-    if err := wm.SaveWallet(wallet, label); err != nil {
-        return nil, fmt.Errorf("failed to save wallet: %v", err)
-    }
-    
-    fmt.Printf("Created new wallet: %s (%s)\n", wallet.GetAddressShort(), label)
-    return wallet, nil
 }
 
 func handleTransaction() {
@@ -359,25 +252,19 @@ func handleTransactionCreate() {
 	var wallet *crypto.Wallet
 	if len(os.Args) >= 6 {
 		walletAddress := os.Args[5]
-		wallet, err = crypto.LoadWalletFromStorage(walletAddress)
+		wallet, err = storage.LoadWalletFromStorage(walletAddress)
 		if err != nil {
 			fmt.Printf("Error loading wallet %s: %v\n", walletAddress[:8], err)
 			return
 		}
 	} else {
-		wallet, err = crypto.GetDefaultWallet()
+		wallet, err = storage.GetDefaultWallet()
 		if err != nil {
 			fmt.Printf("No wallet found: %v\n", err)
 			fmt.Println("   Create a wallet first: chainlog-cli wallet create")
 			fmt.Println("   Or specify wallet: chainlog-cli transaction create <data> <fee> <wallet_address>")
 			return
 		}
-	}
-
-	if bc == nil {
-		fmt.Println("Blockchain not initialized. Please start a node first.")
-		fmt.Println("   Run: chainlog-cli start <port>")
-		return
 	}
 
 	tx, err := core.NewDataTransaction(data, wallet, fee)
@@ -403,19 +290,15 @@ func handleTransactionCreate() {
 		}
 	}
 
-	if node != nil {
-		node.BroadcastTransaction(tx)
-		fmt.Printf("Transaction broadcast to network\n")
-	}
+	f, err := os.OpenFile("pending_broadcasts.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+if err == nil {
+    defer f.Close()
+    f.WriteString(tx.ID + "\n")
+    fmt.Printf("Transaction queued for broadcast\n")
+}
 }
 
 func handleTransactionList() {
-	if bc == nil {
-		fmt.Println("Blockchain not initialized. Please start a node first.")
-		fmt.Println("   Run: chainlog-cli start <port>")
-		return
-	}
-
 	pending := bc.GetPendingTransactions()
 	
 	if len(pending) == 0 {
@@ -425,8 +308,8 @@ func handleTransactionList() {
 
 	fmt.Printf("Pending Transactions (%d):\n\n", len(pending))
 	for i, tx := range pending {
-		fmt.Printf("%d. %s...\n", i+1, tx.ID[:16])
-		fmt.Printf("   From: %s...\n", tx.Sender[:8])
+		fmt.Printf("%d. %s\n", i+1, tx.ID)
+		fmt.Printf("   From: %s\n", tx.Sender[:8])
 		fmt.Printf("   Data: %.50s\n", tx.Data)
 		fmt.Printf("   Fee: %d LogCoins\n", tx.Fee)
 		fmt.Printf("   Size: %d bytes\n", len(tx.Data))
@@ -437,43 +320,6 @@ func handleTransactionList() {
 	}
 }
 
-func handleTransactionBroadcast() {
-	if len(os.Args) < 4 {
-		fmt.Println("Usage: chainlog-cli transaction broadcast <tx_id>")
-		return
-	}
-
-	txID := os.Args[3]
-	
-	if bc == nil {
-		fmt.Println("Blockchain not initialized.")
-		return
-	}
-
-	if node == nil {
-		fmt.Println("Node not running. Please start a node first.")
-		return
-	}
-
-	pending := bc.GetPendingTransactions()
-	var targetTx *core.Transaction
-	
-	for _, tx := range pending {
-		if tx.ID == txID || strings.HasPrefix(tx.ID, txID) {
-			targetTx = tx
-			break
-		}
-	}
-
-	if targetTx == nil {
-		fmt.Printf("Transaction not found: %s\n", txID)
-		return
-	}
-
-	node.BroadcastTransaction(targetTx)
-	fmt.Printf("Transaction broadcast to network: %s...\n", targetTx.ID[:16])
-}
-
 func handleTransactionStatus() {
 	if len(os.Args) < 4 {
 		fmt.Println("Usage: chainlog-cli transaction status <tx_id>")
@@ -482,11 +328,6 @@ func handleTransactionStatus() {
 
 	txID := os.Args[3]
 	
-	if bc == nil {
-		fmt.Println("Blockchain not initialized.")
-		return
-	}
-
 	pending := bc.GetPendingTransactions()
 	for _, tx := range pending {
 		if tx.ID == txID || strings.HasPrefix(tx.ID, txID) {
@@ -518,40 +359,72 @@ func handleTransactionStatus() {
 	fmt.Printf("Transaction not found: %s\n", txID)
 }
 
-func handleMine() {
-	if bc == nil || state == nil {
-		fmt.Println("Please start a node first")
+func handleTransactionBroadcast() {
+	if len(os.Args) < 4 {
+		fmt.Println("Usage: chainlog-cli transaction broadcast <tx_id>")
 		return
 	}
 
-	fmt.Println("Mining pending transactions...")
+	txID := os.Args[3]
 	
-	wallet, err := loadOrCreateWallet()
-	if err != nil {
-		fmt.Printf("Error: %v\n", err)
+	if !storage.IsNodeRunning() {
+		fmt.Println("No node is currently running!")
+		fmt.Println("   Start a node first: chainlog-cli start <port>")
 		return
 	}
 
-	miner := consensus.NewMiner(wallet, bc)
-	block, err := miner.MineBlock()
+	f, err := os.OpenFile("pending_broadcasts.txt", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		fmt.Printf("Mining failed: %v\n", err)
+		fmt.Printf("Error creating broadcast file: %v\n", err)
+		return
+	}
+	defer f.Close()
+	
+	if _, err := f.WriteString(txID + "\n"); err != nil {
+		fmt.Printf("Error writing to broadcast file: %v\n", err)
 		return
 	}
 
-	bc.Chain = append(bc.Chain, block)
-	bc.ClearPendingTransactions()
+	fmt.Printf("Transaction %s... queued for broadcast\n", txID[:16])
+	fmt.Printf("   Node will pick it up within 10 seconds\n")
+	fmt.Printf("   Check node terminal for broadcast confirmation\n")
+}
 
-	fmt.Printf("Successfully mined block %d!\n", block.Index)
-	fmt.Printf("Block hash: %s\n", block.Hash[:16])
+func handleMine() {
+    fmt.Println("Mining pending transactions...")
+    
+    wallet, err := loadOrCreateWallet()
+    if err != nil {
+        fmt.Printf("Error: %v\n", err)
+        return
+    }
+
+    miner := consensus.NewMiner(wallet, bc)
+    block, err := miner.MineBlock()
+    if err != nil {
+        fmt.Printf("Mining failed: %v\n", err)
+        return
+    }
+
+    bc.Chain = append(bc.Chain, block)
+    bc.ClearPendingTransactions()
+
+    if ledger != nil {
+        if err := ledger.SaveBlockchain(); err != nil {
+            fmt.Printf("Warning: Could not save blockchain: %v\n", err)
+        }
+    }
+    if state != nil {
+        if err := state.SaveState(); err != nil {
+            fmt.Printf("Warning: Could not save state: %v\n", err)
+        }
+    }
+
+    fmt.Printf("Successfully mined block %d!\n", block.Index)
+    fmt.Printf("Block hash: %s\n", block.Hash[:16])
 }
 
 func handleStatus() {
-	if bc == nil {
-		fmt.Println("Please start a node first")
-		return
-	}
-
 	fmt.Printf("\nCHAINLOG STATUS\n")
 	fmt.Printf("├─ Blocks: %d\n", bc.GetBlockCount())
 	fmt.Printf("├─ Pending Transactions: %d\n", len(bc.GetPendingTransactions()))
@@ -568,10 +441,6 @@ func handleBalance() {
 		fmt.Println("Usage: chainlog-cli balance <address>")
 		return
 	}
-	if state == nil {
-		fmt.Println("Please start a node first")
-		return
-	}
 
 	address := os.Args[2]
 	balance := state.GetBalance(address)
@@ -586,25 +455,307 @@ func handlePeers() {
 
 	switch os.Args[2] {
 	case "add":
-		if len(os.Args) < 4 {
-			fmt.Println("Usage: chainlog-cli peers add <address>")
-			return
-		}
-		if node == nil {
-			fmt.Println("Please start a node first")
-			return
-		}
-		node.AddPeer(os.Args[3])
-		fmt.Printf("Added peer: %s\n", os.Args[3])
+    if len(os.Args) < 4 {
+        fmt.Println("Usage: chainlog-cli peers add <address>")
+        return
+    }
+    fmt.Println("Peer-to-peer networking not fully implemented yet")
 
 	case "list":
-		if node == nil {
-			fmt.Println("Please start a node first")
-			return
-		}
-		node.Display()
+    if storage.IsNodeRunning() {
+        fmt.Printf("Peers list unavailable across terminals as currently.\n")
+        fmt.Printf("Check the node's terminal output or use the same terminal.\n")
+    } else {
+        fmt.Println("No node is running. Use: chainlog-cli start")
+    }
 
 	default:
 		fmt.Println("Usage: chainlog-cli peers [add|list]")
 	}
+}
+
+func loadOrCreateWallet() (*crypto.Wallet, error) {
+	wm := storage.GetWalletManager()
+	
+	wallets := wm.GetAllWallets()
+	
+	if len(wallets) > 0 {
+		fmt.Printf("Found %d existing wallet(s), using default...\n", len(wallets))
+		wallet, err := storage.GetDefaultWallet()
+		if err != nil {
+			return nil, fmt.Errorf("failed to load default wallet: %v", err)
+		}
+		fmt.Printf("Loaded wallet: %s (%s)\n", wallet.GetAddressShort(), wallets[0].Label)
+		return wallet, nil
+	}
+	
+	fmt.Println("No existing wallets found, creating new wallet...")
+	wallet, err := crypto.NewWallet()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create wallet: %v", err)
+	}
+	
+	label := "Node Wallet " + time.Now().Format("2006-01-02")
+	if err := wm.SaveWallet(wallet, label); err != nil {
+		return nil, fmt.Errorf("failed to save wallet: %v", err)
+	}
+	
+	fmt.Printf("Created new wallet: %s (%s)\n", wallet.GetAddressShort(), label)
+	return wallet, nil
+}
+
+func handleChain() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: chainlog-cli chain [show|validate]")
+		return
+	}
+
+	switch os.Args[2] {
+	case "show":
+		handleChainShow()
+	case "validate":
+		handleChainValidate()
+	default:
+		fmt.Println("Usage: chainlog-cli chain [show|validate]")
+	}
+}
+
+func handleChainShow() {
+    fmt.Printf("\nBLOCKCHAIN (%d blocks)\n", len(bc.Chain))
+    fmt.Println("═══════════════════════════════════════════════════")
+    
+    for i, block := range bc.Chain {
+        fmt.Printf("Block %d:\n", block.Index)
+        
+        if len(block.Hash) >= 16 {
+            fmt.Printf("├─ Hash: %s...\n", block.Hash[:16])
+        } else if len(block.Hash) > 0 {
+            fmt.Printf("├─ Hash: %s\n", block.Hash)
+        } else {
+            fmt.Printf("├─ Hash: (empty)\n")
+        }
+        
+        if len(block.PrevHash) >= 16 {
+            fmt.Printf("├─ Previous: %s...\n", block.PrevHash[:16])
+        } else if len(block.PrevHash) > 0 {
+            fmt.Printf("├─ Previous: %s\n", block.PrevHash)
+        } else {
+            fmt.Printf("├─ Previous: (genesis)\n")
+        }
+        
+        fmt.Printf("├─ Timestamp: %s\n", time.Unix(block.Timestamp, 0).Format("2006-01-02 15:04:05"))
+        fmt.Printf("├─ Transactions: %d\n", len(block.Transactions))
+        fmt.Printf("├─ Nonce: %d\n", block.Nonce)
+        fmt.Printf("└─ Difficulty: %d\n", block.Difficulty)
+        
+        if i < len(bc.Chain)-1 {
+            fmt.Println("   │")
+        }
+    }
+}
+
+func handleChainValidate() {
+	validator := core.NewValidator(bc)
+	isValid := validator.ValidateBlockchain()
+	
+	if isValid {
+		fmt.Println("Blockchain is valid!")
+	} else {
+		fmt.Println("Blockchain validation failed!")
+	}
+}
+
+func handleEconomyStats() {
+	fmt.Println("\nCHAINLOG ECONOMICS")
+	fmt.Println("═══════════════════════════════════════════════════")
+	economy.DisplayEconomics()
+}
+
+func handleFeesStats() {
+    totalFees := uint64(0)
+    totalBurned := uint64(0)
+    
+    for _, block := range bc.Chain {
+        for _, tx := range block.Transactions {
+            if tx.Fee > 0 {
+                totalFees += tx.Fee
+                totalBurned += tx.Fee / 10
+            }
+        }
+    }
+    
+    fmt.Printf("\nFEE STATISTICS (Real Blockchain Data)\n")
+    fmt.Printf("├─ Total Fees Collected: %d LogCoins\n", totalFees)
+    fmt.Printf("├─ Total Fees Burned: %d LogCoins\n", totalBurned)
+    fmt.Printf("├─ Total Transactions: %d\n", countTransactionsWithFees())
+    fmt.Printf("└─ Fee Efficiency: %.1f%%\n", float64(totalFees-totalBurned)/float64(totalFees)*100)
+}
+
+func countTransactionsWithFees() int {
+    count := 0
+    for _, block := range bc.Chain {
+        for _, tx := range block.Transactions {
+            if tx.Fee > 0 {
+                count++
+            }
+        }
+    }
+    return count
+}
+
+func handleRewardsStats() {
+    totalRewards := uint64(0)
+    blocksMined := 0
+    
+    for _, block := range bc.Chain {
+        for _, tx := range block.Transactions {
+            if tx.Type == core.RewardTx {
+                totalRewards += tx.Amount
+                blocksMined++
+            }
+        }
+    }
+    
+    wallet, _ := loadOrCreateWallet()
+    
+    fmt.Printf("\nREWARD STATISTICS (Real Blockchain Data)\n")
+    fmt.Printf("├─ Total Rewards Distributed: %d LogCoins\n", totalRewards)
+    fmt.Printf("├─ Blocks Mined: %d\n", blocksMined)
+    fmt.Printf("├─ Average Reward per Block: %d LogCoins\n", totalRewards/uint64(max(blocksMined, 1)))
+    fmt.Printf("└─ Your Miner: %s\n", wallet.GetAddressShort())
+}
+
+func max(a, b int) int {
+    if a > b {
+        return a
+    }
+    return b
+}
+
+func handleStaking() {
+	if len(os.Args) < 3 {
+		fmt.Println("Usage: chainlog-cli staking [add|list]")
+		return
+	}
+
+	switch os.Args[2] {
+	case "add":
+		handleStakingAdd()
+	case "list":
+		handleStakingList()
+	default:
+		fmt.Println("Usage: chainlog-cli staking [add|list]")
+	}
+}
+
+func handleStakingAdd() {
+	if len(os.Args) < 5 {
+		fmt.Println("Usage: chainlog-cli staking add <address> <amount>")
+		return
+	}
+
+	address := os.Args[3]
+	amount, err := strconv.ParseUint(os.Args[4], 10, 64)
+	if err != nil {
+		fmt.Printf("Invalid amount: %v\n", err)
+		return
+	}
+
+	staking := consensus.NewStakingManager()
+	staking.AddStake(address, amount)
+
+	if err := staking.SaveStakingData(); err != nil {
+		fmt.Printf("Warning: Could not save staking data: %v\n", err)
+	}
+	
+	fmt.Printf("Added stake: %d LogCoins for %s...\n", amount, address[:8])
+}
+
+func handleStakingList() {
+	staking := consensus.NewStakingManager()
+	staking.DisplayValidators()
+}
+
+func handleDifficultyCheck() {
+	diffManager := consensus.NewDifficultyManager(bc)
+	newDifficulty := diffManager.CalculateNewDifficulty()
+	
+	fmt.Printf("\nDIFFICULTY ANALYSIS\n")
+	fmt.Printf("├─ Current Difficulty: %d\n", bc.Difficulty)
+	fmt.Printf("├─ Recommended Difficulty: %d\n", newDifficulty)
+	fmt.Printf("└─ Adjustment: %+d\n", newDifficulty-bc.Difficulty)
+}
+
+func handleSave() {
+	if ledger == nil {
+		ledger = storage.NewLedgerManager(bc)
+	}
+
+	fmt.Println("Saving blockchain and state to disk...")
+	
+	if err := ledger.SaveBlockchain(); err != nil {
+		fmt.Printf("Failed to save blockchain: %v\n", err)
+	} else {
+		fmt.Println(" Blockchain saved successfully!")
+	}
+	
+	if err := state.SaveState(); err != nil {
+		fmt.Printf("Failed to save state: %v\n", err)
+	} else {
+		fmt.Println("Account state saved successfully!")
+	}
+}
+
+func handleLoad() {
+	if ledger == nil {
+		ledger = storage.NewLedgerManager(bc)
+	}
+
+	fmt.Println("Loading blockchain and state from disk...")
+	
+	if err := ledger.LoadBlockchain(); err != nil {
+		fmt.Printf("Failed to load blockchain: %v\n", err)
+	} else {
+		fmt.Printf("Loaded blockchain with %d blocks\n", len(bc.Chain))
+	}
+	
+	if err := state.LoadState(); err != nil {
+		fmt.Printf("Failed to load state: %v\n", err)
+	} else {
+		fmt.Printf("Loaded state with %d accounts\n", len(state.Accounts))
+	}
+}
+
+func handleSummary() {
+	fmt.Println("\nCHAINLOG SYSTEM SUMMARY")
+	fmt.Println("═══════════════════════════════════════════════════")
+	
+	fmt.Printf("Blockchain:\n")
+	fmt.Printf("├─ Blocks: %d\n", bc.GetBlockCount())
+	fmt.Printf("├─ Pending Transactions: %d\n", len(bc.GetPendingTransactions()))
+	fmt.Printf("├─ Difficulty: %d\n", bc.Difficulty)
+	fmt.Printf("└─ Valid: %t\n", core.NewValidator(bc).ValidateBlockchain())
+	
+	if node != nil {
+		fmt.Printf("Network:\n")
+		fmt.Printf("├─ Peers: %d\n", node.GetPeerCount())
+		fmt.Printf("└─ Address: %s\n", node.Address)
+	}
+	
+	wm := storage.GetWalletManager()
+	fmt.Printf("Wallets:\n")
+	fmt.Printf("├─ Total: %d\n", wm.WalletCount())
+	
+	fmt.Printf("Accounts:\n")
+	fmt.Printf("└─ Tracked: %d\n", len(state.Accounts))
+	
+	fmt.Printf("Storage:\n")
+	fmt.Printf("├─ Blockchain File: %s\n", storage.BlocksFile)
+	fmt.Printf("├─ State File: %s\n", storage.StateFile)
+	fmt.Printf("└─ Wallets File: %s\n", storage.WalletsFile)
+	
+	staking := consensus.NewStakingManager()
+	fmt.Printf("Staking:\n")
+	fmt.Printf("├─ Validators: %d\n", len(staking.Validators))
+	fmt.Printf("└─ Total Staked: %d LogCoins\n", staking.GetTotalStaked())
 }
