@@ -86,7 +86,6 @@ func printUsage() {
 	fmt.Println("  peers list                    - List peers")
 	fmt.Println("  chain show                    - Display full blockchain")
 	fmt.Println("  chain validate                - Validate blockchain integrity")
-	fmt.Println("  economy stats                 - Show LogCoin economics")
 	fmt.Println("  fees                    - Show fee statistics")
 	fmt.Println("  rewards                 - Show reward statistics")
 	fmt.Println("  staking add <address> <amt>   - Stake LogCoins")
