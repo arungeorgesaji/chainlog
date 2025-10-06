@@ -1,16 +1,17 @@
+build-all: build-linux build-windows build-macos 
+
+build-linux:
+	GOOS=linux GOARCH=amd64 go build -o bin/chainlog-cli-linux ./cmd/chainlog-cli/
+
+build-windows:
+	GOOS=windows GOARCH=amd64 go build -o bin/chainlog-cli-windows.exe ./cmd/chainlog-cli/
+
+build-macos:
+	GOOS=darwin GOARCH=amd64 go build -o bin/chainlog-cli-macos-intel ./cmd/chainlog-cli/
+	GOOS=darwin GOARCH=arm64 go build -o bin/chainlog-cli-macos-apple ./cmd/chainlog-cli/
+
 build-cli:
 	go build -o bin/chainlog-cli ./cmd/chainlog-cli/
-
-build-test:
-	go build -o bin/chainlog-test ./cmd/chainlog-test/
-
-build-all: build build-test
-
-run-cli:
-	go run ./cmd/chainlog-cli/
-
-run-test:
-	go run ./cmd/chainlog-test/
 
 clean:
 	rm -rf bin/
